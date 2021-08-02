@@ -272,4 +272,75 @@ if (hook.queue.pending) {
 // 将update action执行完后的state作为memoizedState
 hook.memoizedState = baseState;
 ```
+完整代码如下：
+```
+function useState(initialState) {
+  let hook;
 
+  if (isMount) {
+    hook = {
+      queue: {
+        pending: null
+      },
+      memoizedState: initialState,
+      next: null
+    }
+    if (!fiber.memoizedState) {
+      fiber.memoizedState = hook;
+    } else {
+      workInProgressHook.next = hook;
+    }
+    workInProgressHook = hook;
+  } else {
+    hook = workInProgressHook;
+    workInProgressHook = workInProgressHook.next;
+  }
+
+  let baseState = hook.memoizedState;
+  if (hook.queue.pending) {
+    let firstUpdate = hook.queue.pending.next;
+
+    do {
+      const action = firstUpdate.action;
+      baseState = action(baseState);
+      firstUpdate = firstUpdate.next;
+    } while (firstUpdate !== hook.queue.pending.next)
+
+    hook.queue.pending = null;
+  }
+  hook.memoizedState = baseState;
+
+  return [baseState, dispatchAction.bind(null, hook.queue)];
+}
+```
+## 对触发事件进行抽象
+最后，让我们抽象一下React的事件触发方式。
+
+通过调用App返回的click方法模拟组件click的行为。
+
+```
+function App() {
+  const [num, updateNum] = useState(0);
+
+  console.log(`${isMount ? 'mount' : 'update'} num: `, num);
+
+  return {
+    click() {
+      updateNum(num => num + 1);
+    }
+  }
+}
+```
+## 与React的区别
+
+我们用尽可能少的代码模拟了Hooks的运行，但是相比React Hooks，他还有很多不足。以下是他与React Hooks的区别：
+
+1. React Hooks没有使用isMount变量，而是在不同时机使用不同的dispatcher。换言之，mount时的useState与update时的useState不是同一个函数。
+
+2. React Hooks有中途跳过更新的优化手段。
+
+3. React Hooks有batchedUpdates，当在click中触发三次updateNum，精简React会触发三次更新，而React只会触发一次。
+
+4. React Hooks的update有优先级概念，可以跳过不高优先的update。
+
+更多的细节，我们会在本章后续小节讲解。
